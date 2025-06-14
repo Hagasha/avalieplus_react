@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Film, Home, Star, User } from "lucide-react"
+import { Film, Home, Star, User, List } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export function Navbar() {
@@ -13,6 +13,7 @@ export function Navbar() {
     { href: "/usuarios", label: "Usuários", icon: User },
     { href: "/filmes", label: "Filmes", icon: Film },
     { href: "/avaliacoes", label: "Avaliações", icon: Star },
+    { href: "/watchlist", label: "Watchlist", icon: List },
   ]
 
   return (
