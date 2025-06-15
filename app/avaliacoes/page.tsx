@@ -302,24 +302,26 @@ export default function AvaliacoesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Filme</TableHead>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Nota</TableHead>
                 <TableHead>Data</TableHead>
+                <TableHead>Comentário</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {avaliacoes.map((avaliacao) => (
                 <TableRow key={avaliacao.id}>
-                  <TableCell>{avaliacao.id}</TableCell>
                   <TableCell>{avaliacao.filmes?.titulo}</TableCell>
                   <TableCell>{avaliacao.usuarios?.nome}</TableCell>
                   <TableCell>
                     <div className="flex items-center">{renderEstrelas(avaliacao.nota)}</div>
                   </TableCell>
                   <TableCell>{new Date(avaliacao.data_avaliacao).toLocaleDateString("pt-BR")}</TableCell>
+                  <TableCell>
+                    <div className="max-w-xs truncate">{avaliacao.comentario || "Nenhum comentário"}</div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(avaliacao)}>

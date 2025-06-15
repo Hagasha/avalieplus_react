@@ -209,7 +209,6 @@ export default function UsuariosPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Data de Cadastro</TableHead>
@@ -219,7 +218,6 @@ export default function UsuariosPage() {
             <TableBody>
               {usuarios.map((usuario) => (
                 <TableRow key={usuario.id}>
-                  <TableCell>{usuario.id}</TableCell>
                   <TableCell>{usuario.nome}</TableCell>
                   <TableCell>{usuario.email}</TableCell>
                   <TableCell>{new Date(usuario.data_cadastro).toLocaleDateString("pt-BR")}</TableCell>

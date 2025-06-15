@@ -297,22 +297,24 @@ export default function FilmesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
                 <TableHead>Título</TableHead>
                 <TableHead>Diretor</TableHead>
                 <TableHead>Ano</TableHead>
                 <TableHead>Gênero</TableHead>
+                <TableHead>Sinopse</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filmes.map((filme) => (
                 <TableRow key={filme.id}>
-                  <TableCell>{filme.id}</TableCell>
                   <TableCell>{filme.titulo}</TableCell>
                   <TableCell>{filme.diretor}</TableCell>
                   <TableCell>{filme.ano_lancamento}</TableCell>
                   <TableCell>{filme.genero}</TableCell>
+                  <TableCell>
+                    {filme.sinopse.length > 100 ? `${filme.sinopse.substring(0, 100)}...` : filme.sinopse}
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(filme)}>
