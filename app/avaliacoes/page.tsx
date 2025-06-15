@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -14,80 +14,21 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Plus, Star, Trash2 } from "lucide-react"
+import { Pencil, Plus, Star, Trash2, Loader2 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-interface Avaliacao {
-  id: number
-  filmeId: number
-  filmeTitulo: string
-  usuarioId: number
-  usuarioNome: string
-  nota: number
-  comentario: string
-  data: string
-}
-
-interface Usuario {
-  id: number
-  nome: string
-}
-
-interface Filme {
-  id: number
-  titulo: string
-}
+import { supabase, type Avaliacao, type Usuario, type Filme } from "@/lib/supabase"
 
 export default function AvaliacoesPage() {
-  const usuarios: Usuario[] = [
-    { id: 1, nome: "João Silva" },
-    { id: 2, nome: "Maria Santos" },
-    { id: 3, nome: "Pedro Oliveira" },
-  ]
+  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([])
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [filmes, setFilmes] = useState<Filme[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const filmes: Filme[] = [
-    { id: 1, titulo: "Interestelar" },
-    { id: 2, titulo: "Pulp Fiction" },
-    { id: 3, titulo: "Parasita" },
-  ]
-
-  const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([
-    {
-      id: 1,
-      filmeId: 1,
-      filmeTitulo: "Interestelar",
-      usuarioId: 1,
-      usuarioNome: "João Silva",
-      nota: 5,
-      comentario: "Um dos melhores filmes de ficção científica que já assisti!",
-      data: "15/05/2023",
-    },
-    {
-      id: 2,
-      filmeId: 2,
-      filmeTitulo: "Pulp Fiction",
-      usuarioId: 2,
-      usuarioNome: "Maria Santos",
-      nota: 4,
-      comentario: "Clássico do cinema, diálogos brilhantes.",
-      data: "22/06/2023",
-    },
-    {
-      id: 3,
-      filmeId: 3,
-      filmeTitulo: "Parasita",
-      usuarioId: 3,
-      usuarioNome: "Pedro Oliveira",
-      nota: 5,
-      comentario: "Obra-prima do cinema coreano, merece todos os prêmios que recebeu.",
-      data: "10/07/2023",
-    },
-  ])
-
-  const [novaAvaliacao, setNovaAvaliacao] = useState<Omit<Avaliacao, "id" | "filmeTitulo" | "usuarioNome" | "data">>({
-    filmeId: 0,
-    usuarioId: 0,
+  const [novaAvaliacao, setNovaAvaliacao] = useState({
+    filme_id: 0,
+    usuario_id: 0,
     nota: 0,
     comentario: "",
   })
@@ -96,58 +37,117 @@ export default function AvaliacoesPage() {
   const [dialogAberto, setDialogAberto] = useState(false)
   const [modoEdicao, setModoEdicao] = useState(false)
 
-  const adicionarAvaliacao = () => {
-    const hoje = new Date()
-    const dataFormatada = hoje.toLocaleDateString("pt-BR")
+  // Carregar dados
+  const carregarDados = async () => {
+    try {
+      const [avaliacoesResult, usuariosResult, filmesResult] = await Promise.all([
+        supabase
+          .from("avaliacoes")
+          .select(`
+            *,
+            filmes(titulo),
+            usuarios(nome)
+          `)
+          .order("id", { ascending: true }),
+        supabase.from("usuarios").select("*").order("nome"),
+        supabase.from("filmes").select("*").order("titulo"),
+      ])
 
-    const novoId = avaliacoes.length > 0 ? Math.max(...avaliacoes.map((a) => a.id)) + 1 : 1
+      if (avaliacoesResult.error) throw avaliacoesResult.error
+      if (usuariosResult.error) throw usuariosResult.error
+      if (filmesResult.error) throw filmesResult.error
 
-    const filmeEncontrado = filmes.find((f) => f.id === novaAvaliacao.filmeId)
-    const usuarioEncontrado = usuarios.find((u) => u.id === novaAvaliacao.usuarioId)
-
-    if (!filmeEncontrado || !usuarioEncontrado) return
-
-    setAvaliacoes([
-      ...avaliacoes,
-      {
-        id: novoId,
-        filmeId: novaAvaliacao.filmeId,
-        filmeTitulo: filmeEncontrado.titulo,
-        usuarioId: novaAvaliacao.usuarioId,
-        usuarioNome: usuarioEncontrado.nome,
-        nota: novaAvaliacao.nota,
-        comentario: novaAvaliacao.comentario,
-        data: dataFormatada,
-      },
-    ])
-
-    setNovaAvaliacao({
-      filmeId: 0,
-      usuarioId: 0,
-      nota: 0,
-      comentario: "",
-    })
-    setDialogAberto(false)
+      setAvaliacoes(avaliacoesResult.data || [])
+      setUsuarios(usuariosResult.data || [])
+      setFilmes(filmesResult.data || [])
+    } catch (error: any) {
+      alert("Erro ao carregar dados")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const atualizarAvaliacao = () => {
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const adicionarAvaliacao = async () => {
+    if (!novaAvaliacao.filme_id || !novaAvaliacao.usuario_id || !novaAvaliacao.nota) {
+      alert("Preencha todos os campos obrigatórios")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.from("avaliacoes").insert([novaAvaliacao])
+
+      if (error) throw error
+
+      alert("Avaliação adicionada com sucesso")
+
+      setNovaAvaliacao({
+        filme_id: 0,
+        usuario_id: 0,
+        nota: 0,
+        comentario: "",
+      })
+      setDialogAberto(false)
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao adicionar avaliação")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const atualizarAvaliacao = async () => {
     if (!avaliacaoEditando) return
 
-    setAvaliacoes(avaliacoes.map((a) => (a.id === avaliacaoEditando.id ? avaliacaoEditando : a)))
+    setSubmitting(true)
+    try {
+      const { error } = await supabase
+        .from("avaliacoes")
+        .update({
+          nota: avaliacaoEditando.nota,
+          comentario: avaliacaoEditando.comentario,
+        })
+        .eq("id", avaliacaoEditando.id)
 
-    setAvaliacaoEditando(null)
-    setDialogAberto(false)
-    setModoEdicao(false)
+      if (error) throw error
+
+      alert("Avaliação atualizada com sucesso")
+
+      setAvaliacaoEditando(null)
+      setDialogAberto(false)
+      setModoEdicao(false)
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao atualizar avaliação")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const excluirAvaliacao = (id: number) => {
-    setAvaliacoes(avaliacoes.filter((a) => a.id !== id))
+  const excluirAvaliacao = async (id: number) => {
+    if (!confirm("Tem certeza que deseja excluir esta avaliação?")) return
+
+    try {
+      const { error } = await supabase.from("avaliacoes").delete().eq("id", id)
+
+      if (error) throw error
+
+      alert("Avaliação excluída com sucesso")
+
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao excluir avaliação")
+    }
   }
 
   const abrirDialogCriacao = () => {
     setNovaAvaliacao({
-      filmeId: 0,
-      usuarioId: 0,
+      filme_id: 0,
+      usuario_id: 0,
       nota: 0,
       comentario: "",
     })
@@ -167,6 +167,14 @@ export default function AvaliacoesPage() {
       .map((_, i) => (
         <Star key={i} className={`h-4 w-4 ${i < nota ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`} />
       ))
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -199,9 +207,9 @@ export default function AvaliacoesPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="usuario">Usuário</Label>
                       <Select
-                        value={novaAvaliacao.usuarioId.toString()}
+                        value={novaAvaliacao.usuario_id.toString()}
                         onValueChange={(value) => {
-                          setNovaAvaliacao({ ...novaAvaliacao, usuarioId: Number.parseInt(value) })
+                          setNovaAvaliacao({ ...novaAvaliacao, usuario_id: Number.parseInt(value) })
                         }}
                       >
                         <SelectTrigger>
@@ -219,9 +227,9 @@ export default function AvaliacoesPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="filme">Filme</Label>
                       <Select
-                        value={novaAvaliacao.filmeId.toString()}
+                        value={novaAvaliacao.filme_id.toString()}
                         onValueChange={(value) => {
-                          setNovaAvaliacao({ ...novaAvaliacao, filmeId: Number.parseInt(value) })
+                          setNovaAvaliacao({ ...novaAvaliacao, filme_id: Number.parseInt(value) })
                         }}
                       >
                         <SelectTrigger>
@@ -279,10 +287,11 @@ export default function AvaliacoesPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogAberto(false)}>
+                <Button variant="outline" onClick={() => setDialogAberto(false)} disabled={submitting}>
                   Cancelar
                 </Button>
-                <Button onClick={modoEdicao ? atualizarAvaliacao : adicionarAvaliacao}>
+                <Button onClick={modoEdicao ? atualizarAvaliacao : adicionarAvaliacao} disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {modoEdicao ? "Salvar" : "Adicionar"}
                 </Button>
               </DialogFooter>
@@ -305,12 +314,12 @@ export default function AvaliacoesPage() {
               {avaliacoes.map((avaliacao) => (
                 <TableRow key={avaliacao.id}>
                   <TableCell>{avaliacao.id}</TableCell>
-                  <TableCell>{avaliacao.filmeTitulo}</TableCell>
-                  <TableCell>{avaliacao.usuarioNome}</TableCell>
+                  <TableCell>{avaliacao.filmes?.titulo}</TableCell>
+                  <TableCell>{avaliacao.usuarios?.nome}</TableCell>
                   <TableCell>
                     <div className="flex items-center">{renderEstrelas(avaliacao.nota)}</div>
                   </TableCell>
-                  <TableCell>{avaliacao.data}</TableCell>
+                  <TableCell>{new Date(avaliacao.data_avaliacao).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(avaliacao)}>

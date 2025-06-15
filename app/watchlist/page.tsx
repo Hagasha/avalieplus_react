@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -12,175 +12,200 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Plus, Trash2, Check } from "lucide-react"
+import { Pencil, Plus, Trash2, Check, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-interface ItemWatchlist {
-  id: number
-  filmeId: number
-  filmeTitulo: string
-  usuarioId: number
-  usuarioNome: string
-  status: "Para Assistir" | "Assistindo" | "Assistido"
-  prioridade: "Baixa" | "Média" | "Alta"
-  dataAdicionado: string
-  dataAssistido?: string
-  notas?: string
-}
-
-interface Usuario {
-  id: number
-  nome: string
-}
-
-interface Filme {
-  id: number
-  titulo: string
-}
+import { Input } from "@/components/ui/input"
+import { supabase, type WatchlistItem, type Usuario, type Filme } from "@/lib/supabase"
 
 export default function WatchlistPage() {
-  const usuarios: Usuario[] = [
-    { id: 1, nome: "João Silva" },
-    { id: 2, nome: "Maria Santos" },
-    { id: 3, nome: "Pedro Oliveira" },
-  ]
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [filmes, setFilmes] = useState<Filme[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const filmes: Filme[] = [
-    { id: 1, titulo: "Interestelar" },
-    { id: 2, titulo: "Pulp Fiction" },
-    { id: 3, titulo: "Parasita" },
-    { id: 4, titulo: "O Poderoso Chefão" },
-    { id: 5, titulo: "Cidade de Deus" },
-    { id: 6, titulo: "Matrix" },
-  ]
-
-  const [watchlist, setWatchlist] = useState<ItemWatchlist[]>([
-    {
-      id: 1,
-      filmeId: 1,
-      filmeTitulo: "Interestelar",
-      usuarioId: 1,
-      usuarioNome: "João Silva",
-      status: "Para Assistir",
-      prioridade: "Alta",
-      dataAdicionado: "15/05/2023",
-      notas: "Recomendado por amigos",
-    },
-    {
-      id: 2,
-      filmeId: 4,
-      filmeTitulo: "O Poderoso Chefão",
-      usuarioId: 2,
-      usuarioNome: "Maria Santos",
-      status: "Assistindo",
-      prioridade: "Média",
-      dataAdicionado: "22/06/2023",
-      notas: "Clássico que preciso ver",
-    },
-    {
-      id: 3,
-      filmeId: 3,
-      filmeTitulo: "Parasita",
-      usuarioId: 3,
-      usuarioNome: "Pedro Oliveira",
-      status: "Assistido",
-      prioridade: "Alta",
-      dataAdicionado: "10/07/2023",
-      dataAssistido: "15/07/2023",
-      notas: "Filme incrível, superou expectativas",
-    },
-  ])
-
-  const [novoItem, setNovoItem] = useState<
-    Omit<ItemWatchlist, "id" | "filmeTitulo" | "usuarioNome" | "dataAdicionado">
-  >({
-    filmeId: 0,
-    usuarioId: 0,
-    status: "Para Assistir",
-    prioridade: "Média",
+  const [novoItem, setNovoItem] = useState({
+    filme_id: 0,
+    usuario_id: 0,
+    status: "Para Assistir" as const,
+    prioridade: "Média" as const,
     notas: "",
   })
 
-  const [itemEditando, setItemEditando] = useState<ItemWatchlist | null>(null)
+  const [itemEditando, setItemEditando] = useState<WatchlistItem | null>(null)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [modoEdicao, setModoEdicao] = useState(false)
 
-  const adicionarItem = () => {
-    const hoje = new Date()
-    const dataFormatada = hoje.toLocaleDateString("pt-BR")
+  // Carregar dados
+  const carregarDados = async () => {
+    try {
+      const [watchlistResult, usuariosResult, filmesResult] = await Promise.all([
+        supabase
+          .from("watchlist")
+          .select(`
+            *,
+            filmes(titulo),
+            usuarios(nome)
+          `)
+          .order("id", { ascending: true }),
+        supabase.from("usuarios").select("*").order("nome"),
+        supabase.from("filmes").select("*").order("titulo"),
+      ])
 
-    const novoId = watchlist.length > 0 ? Math.max(...watchlist.map((w) => w.id)) + 1 : 1
+      if (watchlistResult.error) throw watchlistResult.error
+      if (usuariosResult.error) throw usuariosResult.error
+      if (filmesResult.error) throw filmesResult.error
 
-    const filmeEncontrado = filmes.find((f) => f.id === novoItem.filmeId)
-    const usuarioEncontrado = usuarios.find((u) => u.id === novoItem.usuarioId)
-
-    if (!filmeEncontrado || !usuarioEncontrado) return
-
-    setWatchlist([
-      ...watchlist,
-      {
-        id: novoId,
-        filmeId: novoItem.filmeId,
-        filmeTitulo: filmeEncontrado.titulo,
-        usuarioId: novoItem.usuarioId,
-        usuarioNome: usuarioEncontrado.nome,
-        status: novoItem.status,
-        prioridade: novoItem.prioridade,
-        dataAdicionado: dataFormatada,
-        notas: novoItem.notas,
-      },
-    ])
-
-    setNovoItem({
-      filmeId: 0,
-      usuarioId: 0,
-      status: "Para Assistir",
-      prioridade: "Média",
-      notas: "",
-    })
-    setDialogAberto(false)
+      setWatchlist(watchlistResult.data || [])
+      setUsuarios(usuariosResult.data || [])
+      setFilmes(filmesResult.data || [])
+    } catch (error: any) {
+      alert("Erro ao carregar dados")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const atualizarItem = () => {
+  useEffect(() => {
+    carregarDados()
+  }, [])
+
+  const adicionarItem = async () => {
+    if (!novoItem.filme_id || !novoItem.usuario_id) {
+      alert("Selecione um filme e um usuário")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.from("watchlist").insert([novoItem])
+
+      if (error) throw error
+
+      alert("Item adicionado à watchlist")
+
+      setNovoItem({
+        filme_id: 0,
+        usuario_id: 0,
+        status: "Para Assistir",
+        prioridade: "Média",
+        notas: "",
+      })
+      setDialogAberto(false)
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao adicionar item")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const atualizarItem = async () => {
     if (!itemEditando) return
 
-    setWatchlist(watchlist.map((w) => (w.id === itemEditando.id ? itemEditando : w)))
+    setSubmitting(true)
+    try {
+      const updateData: any = {
+        status: itemEditando.status,
+        prioridade: itemEditando.prioridade,
+        notas: itemEditando.notas,
+      }
 
-    setItemEditando(null)
-    setDialogAberto(false)
-    setModoEdicao(false)
+      if (itemEditando.status === "Assistido" && !itemEditando.data_assistido) {
+        updateData.data_assistido = new Date().toISOString()
+      }
+
+      const { error } = await supabase.from("watchlist").update(updateData).eq("id", itemEditando.id)
+
+      if (error) throw error
+
+      alert("Item atualizado com sucesso")
+
+      setItemEditando(null)
+      setDialogAberto(false)
+      setModoEdicao(false)
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao atualizar item")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const excluirItem = (id: number) => {
-    setWatchlist(watchlist.filter((w) => w.id !== id))
+  const excluirItem = async (id: number) => {
+    if (!confirm("Tem certeza que deseja excluir este item?")) return
+
+    try {
+      const { error } = await supabase.from("watchlist").delete().eq("id", id)
+
+      if (error) throw error
+
+      alert("Item excluído com sucesso")
+
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao excluir item")
+    }
   }
 
-  const marcarComoAssistido = (id: number) => {
-    const hoje = new Date()
-    const dataFormatada = hoje.toLocaleDateString("pt-BR")
+  const marcarComoAssistido = async (id: number) => {
+    try {
+      const { error } = await supabase
+        .from("watchlist")
+        .update({
+          status: "Assistido",
+          data_assistido: new Date().toISOString(),
+        })
+        .eq("id", id)
 
-    setWatchlist(
-      watchlist.map((w) => (w.id === id ? { ...w, status: "Assistido" as const, dataAssistido: dataFormatada } : w)),
-    )
+      if (error) throw error
+
+      alert("Filme marcado como assistido")
+
+      carregarDados()
+    } catch (error: any) {
+      alert(error.message || "Erro ao marcar como assistido")
+    }
   }
 
-  const abrirDialogCriacao = () => {
+  // Adicionar uma função para recarregar apenas usuários e filmes
+  const recarregarOpcoesSelect = async () => {
+    try {
+      const [usuariosResult, filmesResult] = await Promise.all([
+        supabase.from("usuarios").select("*").order("nome"),
+        supabase.from("filmes").select("*").order("titulo"),
+      ])
+
+      if (usuariosResult.error) throw usuariosResult.error
+      if (filmesResult.error) throw filmesResult.error
+
+      setUsuarios(usuariosResult.data || [])
+      setFilmes(filmesResult.data || [])
+    } catch (error: any) {
+      console.error("Erro ao recarregar opções:", error)
+    }
+  }
+
+  // Modificar a função abrirDialogCriacao para recarregar os dados
+  const abrirDialogCriacao = async () => {
     setNovoItem({
-      filmeId: 0,
-      usuarioId: 0,
+      filme_id: 0,
+      usuario_id: 0,
       status: "Para Assistir",
       prioridade: "Média",
       notas: "",
     })
     setModoEdicao(false)
     setDialogAberto(true)
+
+    // Recarregar as opções dos selects
+    await recarregarOpcoesSelect()
   }
 
-  const abrirDialogEdicao = (item: ItemWatchlist) => {
+  const abrirDialogEdicao = (item: WatchlistItem) => {
     setItemEditando(item)
     setModoEdicao(true)
     setDialogAberto(true)
@@ -204,6 +229,14 @@ export default function WatchlistPage() {
     } as const
 
     return <Badge variant={variants[prioridade as keyof typeof variants] || "default"}>{prioridade}</Badge>
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -236,9 +269,9 @@ export default function WatchlistPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="usuario">Usuário</Label>
                       <Select
-                        value={novoItem.usuarioId.toString()}
+                        value={novoItem.usuario_id.toString()}
                         onValueChange={(value) => {
-                          setNovoItem({ ...novoItem, usuarioId: Number.parseInt(value) })
+                          setNovoItem({ ...novoItem, usuario_id: Number.parseInt(value) })
                         }}
                       >
                         <SelectTrigger>
@@ -256,9 +289,9 @@ export default function WatchlistPage() {
                     <div className="grid gap-2">
                       <Label htmlFor="filme">Filme</Label>
                       <Select
-                        value={novoItem.filmeId.toString()}
+                        value={novoItem.filme_id.toString()}
                         onValueChange={(value) => {
-                          setNovoItem({ ...novoItem, filmeId: Number.parseInt(value) })
+                          setNovoItem({ ...novoItem, filme_id: Number.parseInt(value) })
                         }}
                       >
                         <SelectTrigger>
@@ -281,9 +314,9 @@ export default function WatchlistPage() {
                     value={modoEdicao ? itemEditando?.status : novoItem.status}
                     onValueChange={(value) => {
                       if (modoEdicao && itemEditando) {
-                        setItemEditando({ ...itemEditando, status: value as ItemWatchlist["status"] })
+                        setItemEditando({ ...itemEditando, status: value as WatchlistItem["status"] })
                       } else {
-                        setNovoItem({ ...novoItem, status: value as ItemWatchlist["status"] })
+                        setNovoItem({ ...novoItem, status: value as typeof novoItem.status })
                       }
                     }}
                   >
@@ -303,9 +336,9 @@ export default function WatchlistPage() {
                     value={modoEdicao ? itemEditando?.prioridade : novoItem.prioridade}
                     onValueChange={(value) => {
                       if (modoEdicao && itemEditando) {
-                        setItemEditando({ ...itemEditando, prioridade: value as ItemWatchlist["prioridade"] })
+                        setItemEditando({ ...itemEditando, prioridade: value as WatchlistItem["prioridade"] })
                       } else {
-                        setNovoItem({ ...novoItem, prioridade: value as ItemWatchlist["prioridade"] })
+                        setNovoItem({ ...novoItem, prioridade: value as typeof novoItem.prioridade })
                       }
                     }}
                   >
@@ -336,10 +369,11 @@ export default function WatchlistPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogAberto(false)}>
+                <Button variant="outline" onClick={() => setDialogAberto(false)} disabled={submitting}>
                   Cancelar
                 </Button>
-                <Button onClick={modoEdicao ? atualizarItem : adicionarItem}>
+                <Button onClick={modoEdicao ? atualizarItem : adicionarItem} disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {modoEdicao ? "Salvar" : "Adicionar"}
                 </Button>
               </DialogFooter>
@@ -362,11 +396,11 @@ export default function WatchlistPage() {
             <TableBody>
               {watchlist.map((item) => (
                 <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.filmeTitulo}</TableCell>
-                  <TableCell>{item.usuarioNome}</TableCell>
+                  <TableCell className="font-medium">{item.filmes?.titulo}</TableCell>
+                  <TableCell>{item.usuarios?.nome}</TableCell>
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell>{getPrioridadeBadge(item.prioridade)}</TableCell>
-                  <TableCell>{item.dataAdicionado}</TableCell>
+                  <TableCell>{new Date(item.data_adicionado).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell className="max-w-xs truncate">{item.notas || "-"}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

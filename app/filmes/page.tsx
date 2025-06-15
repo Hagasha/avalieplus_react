@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,54 +15,20 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Trash2, Loader2 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-interface Filme {
-  id: number
-  titulo: string
-  diretor: string
-  anoLancamento: string
-  genero: string
-  sinopse: string
-}
+import { supabase, type Filme } from "@/lib/supabase"
 
 export default function FilmesPage() {
-  const [filmes, setFilmes] = useState<Filme[]>([
-    {
-      id: 1,
-      titulo: "Interestelar",
-      diretor: "Christopher Nolan",
-      anoLancamento: "2014",
-      genero: "Ficção Científica",
-      sinopse:
-        "Um grupo de astronautas viaja através de um buraco de minhoca em busca de um novo lar para a humanidade.",
-    },
-    {
-      id: 2,
-      titulo: "Pulp Fiction",
-      diretor: "Quentin Tarantino",
-      anoLancamento: "1994",
-      genero: "Crime",
-      sinopse:
-        "As vidas de dois assassinos da máfia, um boxeador, um gângster e sua esposa, e um par de bandidos se entrelaçam em quatro histórias de violência e redenção.",
-    },
-    {
-      id: 3,
-      titulo: "Parasita",
-      diretor: "Bong Joon-ho",
-      anoLancamento: "2019",
-      genero: "Drama",
-      sinopse:
-        "A família Kim, pobre e desempregada, desenvolve interesse pela rica família Park, até que se envolvem em um incidente inesperado.",
-    },
-  ])
+  const [filmes, setFilmes] = useState<Filme[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const [novoFilme, setNovoFilme] = useState<Omit<Filme, "id">>({
+  const [novoFilme, setNovoFilme] = useState({
     titulo: "",
     diretor: "",
-    anoLancamento: "",
+    ano_lancamento: "",
     genero: "",
     sinopse: "",
   })
@@ -87,46 +53,106 @@ export default function FilmesPage() {
     "Terror",
   ]
 
-  const adicionarFilme = () => {
-    const novoId = filmes.length > 0 ? Math.max(...filmes.map((f) => f.id)) + 1 : 1
+  // Carregar filmes
+  const carregarFilmes = async () => {
+    try {
+      const { data, error } = await supabase.from("filmes").select("*").order("id", { ascending: true })
 
-    setFilmes([
-      ...filmes,
-      {
-        id: novoId,
-        ...novoFilme,
-      },
-    ])
-
-    setNovoFilme({
-      titulo: "",
-      diretor: "",
-      anoLancamento: "",
-      genero: "",
-      sinopse: "",
-    })
-    setDialogAberto(false)
+      if (error) throw error
+      setFilmes(data || [])
+    } catch (error) {
+      alert("Erro ao carregar filmes")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const atualizarFilme = () => {
+  useEffect(() => {
+    carregarFilmes()
+  }, [])
+
+  const adicionarFilme = async () => {
+    if (!novoFilme.titulo || !novoFilme.diretor || !novoFilme.ano_lancamento || !novoFilme.genero) {
+      alert("Preencha todos os campos obrigatórios")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.from("filmes").insert([novoFilme])
+
+      if (error) throw error
+
+      alert("Filme adicionado com sucesso")
+
+      setNovoFilme({
+        titulo: "",
+        diretor: "",
+        ano_lancamento: "",
+        genero: "",
+        sinopse: "",
+      })
+      setDialogAberto(false)
+      carregarFilmes()
+    } catch (error: any) {
+      alert(error.message || "Erro ao adicionar filme")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const atualizarFilme = async () => {
     if (!filmeEditando) return
 
-    setFilmes(filmes.map((f) => (f.id === filmeEditando.id ? filmeEditando : f)))
+    setSubmitting(true)
+    try {
+      const { error } = await supabase
+        .from("filmes")
+        .update({
+          titulo: filmeEditando.titulo,
+          diretor: filmeEditando.diretor,
+          ano_lancamento: filmeEditando.ano_lancamento,
+          genero: filmeEditando.genero,
+          sinopse: filmeEditando.sinopse,
+        })
+        .eq("id", filmeEditando.id)
 
-    setFilmeEditando(null)
-    setDialogAberto(false)
-    setModoEdicao(false)
+      if (error) throw error
+
+      alert("Filme atualizado com sucesso")
+
+      setFilmeEditando(null)
+      setDialogAberto(false)
+      setModoEdicao(false)
+      carregarFilmes()
+    } catch (error: any) {
+      alert(error.message || "Erro ao atualizar filme")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const excluirFilme = (id: number) => {
-    setFilmes(filmes.filter((f) => f.id !== id))
+  const excluirFilme = async (id: number) => {
+    if (!confirm("Tem certeza que deseja excluir este filme?")) return
+
+    try {
+      const { error } = await supabase.from("filmes").delete().eq("id", id)
+
+      if (error) throw error
+
+      alert("Filme excluído com sucesso")
+
+      carregarFilmes()
+    } catch (error: any) {
+      alert(error.message || "Erro ao excluir filme")
+    }
   }
 
   const abrirDialogCriacao = () => {
     setNovoFilme({
       titulo: "",
       diretor: "",
-      anoLancamento: "",
+      ano_lancamento: "",
       genero: "",
       sinopse: "",
     })
@@ -138,6 +164,14 @@ export default function FilmesPage() {
     setFilmeEditando(filme)
     setModoEdicao(true)
     setDialogAberto(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -197,12 +231,12 @@ export default function FilmesPage() {
                   <Label htmlFor="anoLancamento">Ano de Lançamento</Label>
                   <Input
                     id="anoLancamento"
-                    value={modoEdicao ? filmeEditando?.anoLancamento || "" : novoFilme.anoLancamento}
+                    value={modoEdicao ? filmeEditando?.ano_lancamento || "" : novoFilme.ano_lancamento}
                     onChange={(e) => {
                       if (modoEdicao && filmeEditando) {
-                        setFilmeEditando({ ...filmeEditando, anoLancamento: e.target.value })
+                        setFilmeEditando({ ...filmeEditando, ano_lancamento: e.target.value })
                       } else {
-                        setNovoFilme({ ...novoFilme, anoLancamento: e.target.value })
+                        setNovoFilme({ ...novoFilme, ano_lancamento: e.target.value })
                       }
                     }}
                   />
@@ -248,10 +282,11 @@ export default function FilmesPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogAberto(false)}>
+                <Button variant="outline" onClick={() => setDialogAberto(false)} disabled={submitting}>
                   Cancelar
                 </Button>
-                <Button onClick={modoEdicao ? atualizarFilme : adicionarFilme}>
+                <Button onClick={modoEdicao ? atualizarFilme : adicionarFilme} disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {modoEdicao ? "Salvar" : "Adicionar"}
                 </Button>
               </DialogFooter>
@@ -276,7 +311,7 @@ export default function FilmesPage() {
                   <TableCell>{filme.id}</TableCell>
                   <TableCell>{filme.titulo}</TableCell>
                   <TableCell>{filme.diretor}</TableCell>
-                  <TableCell>{filme.anoLancamento}</TableCell>
+                  <TableCell>{filme.ano_lancamento}</TableCell>
                   <TableCell>{filme.genero}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -15,23 +15,15 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Plus, Trash2 } from "lucide-react"
-
-interface Usuario {
-  id: number
-  nome: string
-  email: string
-  dataCadastro: string
-}
+import { Pencil, Plus, Trash2, Loader2 } from "lucide-react"
+import { supabase, type Usuario } from "@/lib/supabase"
 
 export default function UsuariosPage() {
-  const [usuarios, setUsuarios] = useState<Usuario[]>([
-    { id: 1, nome: "João Silva", email: "joao@email.com", dataCadastro: "10/06/2023" },
-    { id: 2, nome: "Maria Santos", email: "maria@email.com", dataCadastro: "15/07/2023" },
-    { id: 3, nome: "Pedro Oliveira", email: "pedro@email.com", dataCadastro: "22/08/2023" },
-  ])
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
 
-  const [novoUsuario, setNovoUsuario] = useState<Omit<Usuario, "id" | "dataCadastro">>({
+  const [novoUsuario, setNovoUsuario] = useState({
     nome: "",
     email: "",
   })
@@ -40,38 +32,90 @@ export default function UsuariosPage() {
   const [dialogAberto, setDialogAberto] = useState(false)
   const [modoEdicao, setModoEdicao] = useState(false)
 
-  const adicionarUsuario = () => {
-    const hoje = new Date()
-    const dataFormatada = hoje.toLocaleDateString("pt-BR")
+  // Carregar usuários
+  const carregarUsuarios = async () => {
+    try {
+      const { data, error } = await supabase.from("usuarios").select("*").order("id", { ascending: true })
 
-    const novoId = usuarios.length > 0 ? Math.max(...usuarios.map((u) => u.id)) + 1 : 1
-
-    setUsuarios([
-      ...usuarios,
-      {
-        id: novoId,
-        nome: novoUsuario.nome,
-        email: novoUsuario.email,
-        dataCadastro: dataFormatada,
-      },
-    ])
-
-    setNovoUsuario({ nome: "", email: "" })
-    setDialogAberto(false)
+      if (error) throw error
+      setUsuarios(data || [])
+    } catch (error) {
+      alert("Erro ao carregar usuários")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const atualizarUsuario = () => {
+  useEffect(() => {
+    carregarUsuarios()
+  }, [])
+
+  const adicionarUsuario = async () => {
+    if (!novoUsuario.nome || !novoUsuario.email) {
+      alert("Preencha todos os campos")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.from("usuarios").insert([novoUsuario])
+
+      if (error) throw error
+
+      alert("Usuário adicionado com sucesso")
+
+      setNovoUsuario({ nome: "", email: "" })
+      setDialogAberto(false)
+      carregarUsuarios()
+    } catch (error: any) {
+      alert(error.message || "Erro ao adicionar usuário")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const atualizarUsuario = async () => {
     if (!usuarioEditando) return
 
-    setUsuarios(usuarios.map((u) => (u.id === usuarioEditando.id ? usuarioEditando : u)))
+    setSubmitting(true)
+    try {
+      const { error } = await supabase
+        .from("usuarios")
+        .update({
+          nome: usuarioEditando.nome,
+          email: usuarioEditando.email,
+        })
+        .eq("id", usuarioEditando.id)
 
-    setUsuarioEditando(null)
-    setDialogAberto(false)
-    setModoEdicao(false)
+      if (error) throw error
+
+      alert("Usuário atualizado com sucesso")
+
+      setUsuarioEditando(null)
+      setDialogAberto(false)
+      setModoEdicao(false)
+      carregarUsuarios()
+    } catch (error: any) {
+      alert(error.message || "Erro ao atualizar usuário")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  const excluirUsuario = (id: number) => {
-    setUsuarios(usuarios.filter((u) => u.id !== id))
+  const excluirUsuario = async (id: number) => {
+    if (!confirm("Tem certeza que deseja excluir este usuário?")) return
+
+    try {
+      const { error } = await supabase.from("usuarios").delete().eq("id", id)
+
+      if (error) throw error
+
+      alert("Usuário excluído com sucesso")
+
+      carregarUsuarios()
+    } catch (error: any) {
+      alert(error.message || "Erro ao excluir usuário")
+    }
   }
 
   const abrirDialogCriacao = () => {
@@ -84,6 +128,14 @@ export default function UsuariosPage() {
     setUsuarioEditando(usuario)
     setModoEdicao(true)
     setDialogAberto(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -142,10 +194,11 @@ export default function UsuariosPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogAberto(false)}>
+                <Button variant="outline" onClick={() => setDialogAberto(false)} disabled={submitting}>
                   Cancelar
                 </Button>
-                <Button onClick={modoEdicao ? atualizarUsuario : adicionarUsuario}>
+                <Button onClick={modoEdicao ? atualizarUsuario : adicionarUsuario} disabled={submitting}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {modoEdicao ? "Salvar" : "Adicionar"}
                 </Button>
               </DialogFooter>
@@ -169,7 +222,7 @@ export default function UsuariosPage() {
                   <TableCell>{usuario.id}</TableCell>
                   <TableCell>{usuario.nome}</TableCell>
                   <TableCell>{usuario.email}</TableCell>
-                  <TableCell>{usuario.dataCadastro}</TableCell>
+                  <TableCell>{new Date(usuario.data_cadastro).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(usuario)}>
