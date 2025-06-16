@@ -19,6 +19,7 @@ import { Pencil, Plus, Trash2, Check, Loader2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { supabase, type WatchlistItem, type Usuario, type Filme } from "@/lib/supabase"
+import { useNotifications } from "@/components/notification"
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
@@ -26,6 +27,7 @@ export default function WatchlistPage() {
   const [filmes, setFilmes] = useState<Filme[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const { success, error, warning, info } = useNotifications()
 
   const [novoItem, setNovoItem] = useState({
     filme_id: 0,
@@ -62,8 +64,8 @@ export default function WatchlistPage() {
       setWatchlist(watchlistResult.data || [])
       setUsuarios(usuariosResult.data || [])
       setFilmes(filmesResult.data || [])
-    } catch (error: any) {
-      alert("Erro ao carregar dados")
+    } catch (err: any) {
+      error("Erro ao carregar dados", "Não foi possível carregar as informações da watchlist")
     } finally {
       setLoading(false)
     }
@@ -75,17 +77,30 @@ export default function WatchlistPage() {
 
   const adicionarItem = async () => {
     if (!novoItem.filme_id || !novoItem.usuario_id) {
-      alert("Selecione um filme e um usuário")
+      error("Campos obrigatórios", "Selecione um filme e um usuário para continuar")
+      return
+    }
+
+    // Verificar se já existe o mesmo filme na watchlist do usuário
+    const itemExistente = watchlist.find(
+      (item) => item.filme_id === novoItem.filme_id && item.usuario_id === novoItem.usuario_id,
+    )
+
+    if (itemExistente) {
+      warning("Item já existe", "Este filme já está na watchlist deste usuário")
       return
     }
 
     setSubmitting(true)
     try {
-      const { error } = await supabase.from("watchlist").insert([novoItem])
+      const { error: supabaseError } = await supabase.from("watchlist").insert([novoItem])
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Item adicionado à watchlist")
+      const filme = filmes.find((f) => f.id === novoItem.filme_id)
+      const usuario = usuarios.find((u) => u.id === novoItem.usuario_id)
+
+      success("Adicionado à watchlist!", `"${filme?.titulo}" foi adicionado à watchlist de ${usuario?.nome}`)
 
       setNovoItem({
         filme_id: 0,
@@ -96,8 +111,8 @@ export default function WatchlistPage() {
       })
       setDialogAberto(false)
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao adicionar item")
+    } catch (err: any) {
+      error("Erro ao adicionar item", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
@@ -118,42 +133,45 @@ export default function WatchlistPage() {
         updateData.data_assistido = new Date().toISOString()
       }
 
-      const { error } = await supabase.from("watchlist").update(updateData).eq("id", itemEditando.id)
+      const { error: supabaseError } = await supabase.from("watchlist").update(updateData).eq("id", itemEditando.id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Item atualizado com sucesso")
+      const statusMessage =
+        itemEditando.status === "Assistido" ? "Filme marcado como assistido! 🎬" : "Item atualizado com sucesso!"
+
+      success("Watchlist atualizada!", statusMessage)
 
       setItemEditando(null)
       setDialogAberto(false)
       setModoEdicao(false)
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao atualizar item")
+    } catch (err: any) {
+      error("Erro ao atualizar item", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
   }
 
-  const excluirItem = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir este item?")) return
+  const excluirItem = async (id: number, filme: string, usuario: string) => {
+    if (!confirm(`Tem certeza que deseja remover "${filme}" da watchlist de ${usuario}?`)) return
 
     try {
-      const { error } = await supabase.from("watchlist").delete().eq("id", id)
+      const { error: supabaseError } = await supabase.from("watchlist").delete().eq("id", id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Item excluído com sucesso")
+      success("Item removido!", `"${filme}" foi removido da watchlist de ${usuario}`)
 
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao excluir item")
+    } catch (err: any) {
+      error("Erro ao excluir item", err.message || "Ocorreu um erro inesperado")
     }
   }
 
-  const marcarComoAssistido = async (id: number) => {
+  const marcarComoAssistido = async (id: number, filme: string) => {
     try {
-      const { error } = await supabase
+      const { error: supabaseError } = await supabase
         .from("watchlist")
         .update({
           status: "Assistido",
@@ -161,13 +179,13 @@ export default function WatchlistPage() {
         })
         .eq("id", id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Filme marcado como assistido")
+      success("Filme assistido! 🎉", `"${filme}" foi marcado como assistido`)
 
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao marcar como assistido")
+    } catch (err: any) {
+      error("Erro ao marcar como assistido", err.message || "Ocorreu um erro inesperado")
     }
   }
 
@@ -184,8 +202,8 @@ export default function WatchlistPage() {
 
       setUsuarios(usuariosResult.data || [])
       setFilmes(filmesResult.data || [])
-    } catch (error: any) {
-      console.error("Erro ao recarregar opções:", error)
+    } catch (err: any) {
+      console.error("Erro ao recarregar opções:", err)
     }
   }
 
@@ -203,6 +221,7 @@ export default function WatchlistPage() {
 
     // Recarregar as opções dos selects
     await recarregarOpcoesSelect()
+    info("Carregando opções...", "Atualizando lista de filmes e usuários")
   }
 
   const abrirDialogEdicao = (item: WatchlistItem) => {
@@ -324,9 +343,9 @@ export default function WatchlistPage() {
                       <SelectValue placeholder="Selecione um status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Para Assistir">Para Assistir</SelectItem>
-                      <SelectItem value="Assistindo">Assistindo</SelectItem>
-                      <SelectItem value="Assistido">Assistido</SelectItem>
+                      <SelectItem value="Para Assistir">📋 Para Assistir</SelectItem>
+                      <SelectItem value="Assistindo">▶️ Assistindo</SelectItem>
+                      <SelectItem value="Assistido">✅ Assistido</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -346,9 +365,9 @@ export default function WatchlistPage() {
                       <SelectValue placeholder="Selecione uma prioridade" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Baixa">Baixa</SelectItem>
-                      <SelectItem value="Média">Média</SelectItem>
-                      <SelectItem value="Alta">Alta</SelectItem>
+                      <SelectItem value="Baixa">🟢 Baixa</SelectItem>
+                      <SelectItem value="Média">🟡 Média</SelectItem>
+                      <SelectItem value="Alta">🔴 Alta</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -356,7 +375,7 @@ export default function WatchlistPage() {
                   <Label htmlFor="notas">Notas (opcional)</Label>
                   <Input
                     id="notas"
-                    placeholder="Adicione suas notas sobre o filme"
+                    placeholder="Ex: Recomendado por amigos, assistir no fim de semana..."
                     value={modoEdicao ? itemEditando?.notas || "" : novoItem.notas}
                     onChange={(e) => {
                       if (modoEdicao && itemEditando) {
@@ -401,14 +420,18 @@ export default function WatchlistPage() {
                   <TableCell>{getStatusBadge(item.status)}</TableCell>
                   <TableCell>{getPrioridadeBadge(item.prioridade)}</TableCell>
                   <TableCell>{new Date(item.data_adicionado).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell className="max-w-xs truncate">{item.notas || "-"}</TableCell>
+                  <TableCell className="max-w-xs">
+                    <div className="truncate" title={item.notas}>
+                      {item.notas || "-"}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       {item.status !== "Assistido" && (
                         <Button
                           variant="outline"
                           size="icon"
-                          onClick={() => marcarComoAssistido(item.id)}
+                          onClick={() => marcarComoAssistido(item.id, item.filmes?.titulo || "filme")}
                           title="Marcar como assistido"
                         >
                           <Check className="h-4 w-4" />
@@ -417,7 +440,13 @@ export default function WatchlistPage() {
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(item)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="icon" onClick={() => excluirItem(item.id)}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          excluirItem(item.id, item.filmes?.titulo || "filme", item.usuarios?.nome || "usuário")
+                        }
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

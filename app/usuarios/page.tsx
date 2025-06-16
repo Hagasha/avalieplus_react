@@ -17,11 +17,13 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Pencil, Plus, Trash2, Loader2 } from "lucide-react"
 import { supabase, type Usuario } from "@/lib/supabase"
+import { useNotifications } from "@/components/notification"
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const { success, error } = useNotifications()
 
   const [novoUsuario, setNovoUsuario] = useState({
     nome: "",
@@ -35,12 +37,15 @@ export default function UsuariosPage() {
   // Carregar usuários
   const carregarUsuarios = async () => {
     try {
-      const { data, error } = await supabase.from("usuarios").select("*").order("id", { ascending: true })
+      const { data, error: supabaseError } = await supabase
+        .from("usuarios")
+        .select("*")
+        .order("id", { ascending: true })
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
       setUsuarios(data || [])
-    } catch (error) {
-      alert("Erro ao carregar usuários")
+    } catch (err) {
+      error("Erro ao carregar usuários", "Não foi possível carregar a lista de usuários")
     } finally {
       setLoading(false)
     }
@@ -52,23 +57,23 @@ export default function UsuariosPage() {
 
   const adicionarUsuario = async () => {
     if (!novoUsuario.nome || !novoUsuario.email) {
-      alert("Preencha todos os campos")
+      error("Campos obrigatórios", "Preencha todos os campos")
       return
     }
 
     setSubmitting(true)
     try {
-      const { error } = await supabase.from("usuarios").insert([novoUsuario])
+      const { error: supabaseError } = await supabase.from("usuarios").insert([novoUsuario])
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Usuário adicionado com sucesso")
+      success("Usuário adicionado!", `O usuário "${novoUsuario.nome}" foi adicionado com sucesso`)
 
       setNovoUsuario({ nome: "", email: "" })
       setDialogAberto(false)
       carregarUsuarios()
-    } catch (error: any) {
-      alert(error.message || "Erro ao adicionar usuário")
+    } catch (err: any) {
+      error("Erro ao adicionar usuário", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
@@ -79,7 +84,7 @@ export default function UsuariosPage() {
 
     setSubmitting(true)
     try {
-      const { error } = await supabase
+      const { error: supabaseError } = await supabase
         .from("usuarios")
         .update({
           nome: usuarioEditando.nome,
@@ -87,34 +92,34 @@ export default function UsuariosPage() {
         })
         .eq("id", usuarioEditando.id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Usuário atualizado com sucesso")
+      success("Usuário atualizado!", `O usuário "${usuarioEditando.nome}" foi atualizado com sucesso`)
 
       setUsuarioEditando(null)
       setDialogAberto(false)
       setModoEdicao(false)
       carregarUsuarios()
-    } catch (error: any) {
-      alert(error.message || "Erro ao atualizar usuário")
+    } catch (err: any) {
+      error("Erro ao atualizar usuário", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
   }
 
-  const excluirUsuario = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir este usuário?")) return
+  const excluirUsuario = async (id: number, nome: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o usuário "${nome}"?`)) return
 
     try {
-      const { error } = await supabase.from("usuarios").delete().eq("id", id)
+      const { error: supabaseError } = await supabase.from("usuarios").delete().eq("id", id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Usuário excluído com sucesso")
+      success("Usuário excluído!", `O usuário "${nome}" foi excluído com sucesso`)
 
       carregarUsuarios()
-    } catch (error: any) {
-      alert(error.message || "Erro ao excluir usuário")
+    } catch (err: any) {
+      error("Erro ao excluir usuário", err.message || "Ocorreu um erro inesperado")
     }
   }
 
@@ -218,7 +223,7 @@ export default function UsuariosPage() {
             <TableBody>
               {usuarios.map((usuario) => (
                 <TableRow key={usuario.id}>
-                  <TableCell>{usuario.nome}</TableCell>
+                  <TableCell className="font-medium">{usuario.nome}</TableCell>
                   <TableCell>{usuario.email}</TableCell>
                   <TableCell>{new Date(usuario.data_cadastro).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell className="text-right">
@@ -226,7 +231,7 @@ export default function UsuariosPage() {
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(usuario)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="icon" onClick={() => excluirUsuario(usuario.id)}>
+                      <Button variant="outline" size="icon" onClick={() => excluirUsuario(usuario.id, usuario.nome)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

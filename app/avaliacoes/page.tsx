@@ -18,6 +18,7 @@ import { Pencil, Plus, Star, Trash2, Loader2 } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase, type Avaliacao, type Usuario, type Filme } from "@/lib/supabase"
+import { useNotifications } from "@/components/notification"
 
 export default function AvaliacoesPage() {
   const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([])
@@ -25,6 +26,7 @@ export default function AvaliacoesPage() {
   const [filmes, setFilmes] = useState<Filme[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const { success, error, warning } = useNotifications()
 
   const [novaAvaliacao, setNovaAvaliacao] = useState({
     filme_id: 0,
@@ -60,8 +62,8 @@ export default function AvaliacoesPage() {
       setAvaliacoes(avaliacoesResult.data || [])
       setUsuarios(usuariosResult.data || [])
       setFilmes(filmesResult.data || [])
-    } catch (error: any) {
-      alert("Erro ao carregar dados")
+    } catch (err: any) {
+      error("Erro ao carregar dados", "Não foi possível carregar as informações necessárias")
     } finally {
       setLoading(false)
     }
@@ -73,17 +75,33 @@ export default function AvaliacoesPage() {
 
   const adicionarAvaliacao = async () => {
     if (!novaAvaliacao.filme_id || !novaAvaliacao.usuario_id || !novaAvaliacao.nota) {
-      alert("Preencha todos os campos obrigatórios")
+      error("Campos obrigatórios", "Selecione um filme, usuário e nota para continuar")
+      return
+    }
+
+    // Verificar se já existe avaliação do mesmo usuário para o mesmo filme
+    const avaliacaoExistente = avaliacoes.find(
+      (av) => av.filme_id === novaAvaliacao.filme_id && av.usuario_id === novaAvaliacao.usuario_id,
+    )
+
+    if (avaliacaoExistente) {
+      warning("Avaliação já existe", "Este usuário já avaliou este filme. Edite a avaliação existente.")
       return
     }
 
     setSubmitting(true)
     try {
-      const { error } = await supabase.from("avaliacoes").insert([novaAvaliacao])
+      const { error: supabaseError } = await supabase.from("avaliacoes").insert([novaAvaliacao])
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Avaliação adicionada com sucesso")
+      const filme = filmes.find((f) => f.id === novaAvaliacao.filme_id)
+      const usuario = usuarios.find((u) => u.id === novaAvaliacao.usuario_id)
+
+      success(
+        "Avaliação adicionada!",
+        `${usuario?.nome} avaliou "${filme?.titulo}" com ${novaAvaliacao.nota} estrela${novaAvaliacao.nota > 1 ? "s" : ""}`,
+      )
 
       setNovaAvaliacao({
         filme_id: 0,
@@ -93,8 +111,8 @@ export default function AvaliacoesPage() {
       })
       setDialogAberto(false)
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao adicionar avaliação")
+    } catch (err: any) {
+      error("Erro ao adicionar avaliação", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
@@ -105,7 +123,7 @@ export default function AvaliacoesPage() {
 
     setSubmitting(true)
     try {
-      const { error } = await supabase
+      const { error: supabaseError } = await supabase
         .from("avaliacoes")
         .update({
           nota: avaliacaoEditando.nota,
@@ -113,34 +131,37 @@ export default function AvaliacoesPage() {
         })
         .eq("id", avaliacaoEditando.id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Avaliação atualizada com sucesso")
+      success(
+        "Avaliação atualizada!",
+        `A avaliação foi atualizada para ${avaliacaoEditando.nota} estrela${avaliacaoEditando.nota > 1 ? "s" : ""}`,
+      )
 
       setAvaliacaoEditando(null)
       setDialogAberto(false)
       setModoEdicao(false)
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao atualizar avaliação")
+    } catch (err: any) {
+      error("Erro ao atualizar avaliação", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
   }
 
-  const excluirAvaliacao = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir esta avaliação?")) return
+  const excluirAvaliacao = async (id: number, filme: string, usuario: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a avaliação de "${usuario}" para "${filme}"?`)) return
 
     try {
-      const { error } = await supabase.from("avaliacoes").delete().eq("id", id)
+      const { error: supabaseError } = await supabase.from("avaliacoes").delete().eq("id", id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Avaliação excluída com sucesso")
+      success("Avaliação excluída!", `A avaliação de "${usuario}" foi removida com sucesso`)
 
       carregarDados()
-    } catch (error: any) {
-      alert(error.message || "Erro ao excluir avaliação")
+    } catch (err: any) {
+      error("Erro ao excluir avaliação", err.message || "Ocorreu um erro inesperado")
     }
   }
 
@@ -262,11 +283,11 @@ export default function AvaliacoesPage() {
                       <SelectValue placeholder="Selecione uma nota" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">1 - Péssimo</SelectItem>
-                      <SelectItem value="2">2 - Ruim</SelectItem>
-                      <SelectItem value="3">3 - Regular</SelectItem>
-                      <SelectItem value="4">4 - Bom</SelectItem>
-                      <SelectItem value="5">5 - Excelente</SelectItem>
+                      <SelectItem value="1">⭐ 1 - Péssimo</SelectItem>
+                      <SelectItem value="2">⭐⭐ 2 - Ruim</SelectItem>
+                      <SelectItem value="3">⭐⭐⭐ 3 - Regular</SelectItem>
+                      <SelectItem value="4">⭐⭐⭐⭐ 4 - Bom</SelectItem>
+                      <SelectItem value="5">⭐⭐⭐⭐⭐ 5 - Excelente</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -275,6 +296,7 @@ export default function AvaliacoesPage() {
                   <Textarea
                     id="comentario"
                     rows={3}
+                    placeholder="Compartilhe sua opinião sobre o filme..."
                     value={modoEdicao ? avaliacaoEditando?.comentario || "" : novaAvaliacao.comentario}
                     onChange={(e) => {
                       if (modoEdicao && avaliacaoEditando) {
@@ -305,29 +327,41 @@ export default function AvaliacoesPage() {
                 <TableHead>Filme</TableHead>
                 <TableHead>Usuário</TableHead>
                 <TableHead>Nota</TableHead>
-                <TableHead>Data</TableHead>
                 <TableHead>Comentário</TableHead>
+                <TableHead>Data</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {avaliacoes.map((avaliacao) => (
                 <TableRow key={avaliacao.id}>
-                  <TableCell>{avaliacao.filmes?.titulo}</TableCell>
+                  <TableCell className="font-medium">{avaliacao.filmes?.titulo}</TableCell>
                   <TableCell>{avaliacao.usuarios?.nome}</TableCell>
                   <TableCell>
-                    <div className="flex items-center">{renderEstrelas(avaliacao.nota)}</div>
+                    <div className="flex items-center gap-1">{renderEstrelas(avaliacao.nota)}</div>
+                  </TableCell>
+                  <TableCell className="max-w-xs">
+                    <div className="truncate" title={avaliacao.comentario}>
+                      {avaliacao.comentario || "-"}
+                    </div>
                   </TableCell>
                   <TableCell>{new Date(avaliacao.data_avaliacao).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell>
-                    <div className="max-w-xs truncate">{avaliacao.comentario || "Nenhum comentário"}</div>
-                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(avaliacao)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="icon" onClick={() => excluirAvaliacao(avaliacao.id)}>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          excluirAvaliacao(
+                            avaliacao.id,
+                            avaliacao.filmes?.titulo || "filme",
+                            avaliacao.usuarios?.nome || "usuário",
+                          )
+                        }
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

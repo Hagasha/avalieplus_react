@@ -15,15 +15,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Pencil, Plus, Trash2, Loader2 } from "lucide-react"
+import { Pencil, Plus, Trash2, Loader2, ImageIcon } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase, type Filme } from "@/lib/supabase"
+import { useNotifications } from "@/components/notification"
+import { ImageUpload } from "@/components/image-upload"
 
 export default function FilmesPage() {
   const [filmes, setFilmes] = useState<Filme[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const { success, error } = useNotifications()
 
   const [novoFilme, setNovoFilme] = useState({
     titulo: "",
@@ -31,6 +34,7 @@ export default function FilmesPage() {
     ano_lancamento: "",
     genero: "",
     sinopse: "",
+    capa_url: "",
   })
 
   const [filmeEditando, setFilmeEditando] = useState<Filme | null>(null)
@@ -56,12 +60,12 @@ export default function FilmesPage() {
   // Carregar filmes
   const carregarFilmes = async () => {
     try {
-      const { data, error } = await supabase.from("filmes").select("*").order("id", { ascending: true })
+      const { data, error: supabaseError } = await supabase.from("filmes").select("*").order("id", { ascending: true })
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
       setFilmes(data || [])
-    } catch (error) {
-      alert("Erro ao carregar filmes")
+    } catch (err) {
+      error("Erro ao carregar filmes", "Não foi possível carregar a lista de filmes")
     } finally {
       setLoading(false)
     }
@@ -73,17 +77,17 @@ export default function FilmesPage() {
 
   const adicionarFilme = async () => {
     if (!novoFilme.titulo || !novoFilme.diretor || !novoFilme.ano_lancamento || !novoFilme.genero) {
-      alert("Preencha todos os campos obrigatórios")
+      error("Campos obrigatórios", "Preencha todos os campos obrigatórios")
       return
     }
 
     setSubmitting(true)
     try {
-      const { error } = await supabase.from("filmes").insert([novoFilme])
+      const { error: supabaseError } = await supabase.from("filmes").insert([novoFilme])
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Filme adicionado com sucesso")
+      success("Filme adicionado!", `O filme "${novoFilme.titulo}" foi adicionado com sucesso`)
 
       setNovoFilme({
         titulo: "",
@@ -91,11 +95,12 @@ export default function FilmesPage() {
         ano_lancamento: "",
         genero: "",
         sinopse: "",
+        capa_url: "",
       })
       setDialogAberto(false)
       carregarFilmes()
-    } catch (error: any) {
-      alert(error.message || "Erro ao adicionar filme")
+    } catch (err: any) {
+      error("Erro ao adicionar filme", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
@@ -106,7 +111,7 @@ export default function FilmesPage() {
 
     setSubmitting(true)
     try {
-      const { error } = await supabase
+      const { error: supabaseError } = await supabase
         .from("filmes")
         .update({
           titulo: filmeEditando.titulo,
@@ -114,37 +119,38 @@ export default function FilmesPage() {
           ano_lancamento: filmeEditando.ano_lancamento,
           genero: filmeEditando.genero,
           sinopse: filmeEditando.sinopse,
+          capa_url: filmeEditando.capa_url,
         })
         .eq("id", filmeEditando.id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Filme atualizado com sucesso")
+      success("Filme atualizado!", `O filme "${filmeEditando.titulo}" foi atualizado com sucesso`)
 
       setFilmeEditando(null)
       setDialogAberto(false)
       setModoEdicao(false)
       carregarFilmes()
-    } catch (error: any) {
-      alert(error.message || "Erro ao atualizar filme")
+    } catch (err: any) {
+      error("Erro ao atualizar filme", err.message || "Ocorreu um erro inesperado")
     } finally {
       setSubmitting(false)
     }
   }
 
-  const excluirFilme = async (id: number) => {
-    if (!confirm("Tem certeza que deseja excluir este filme?")) return
+  const excluirFilme = async (id: number, titulo: string) => {
+    if (!confirm(`Tem certeza que deseja excluir o filme "${titulo}"?`)) return
 
     try {
-      const { error } = await supabase.from("filmes").delete().eq("id", id)
+      const { error: supabaseError } = await supabase.from("filmes").delete().eq("id", id)
 
-      if (error) throw error
+      if (supabaseError) throw supabaseError
 
-      alert("Filme excluído com sucesso")
+      success("Filme excluído!", `O filme "${titulo}" foi excluído com sucesso`)
 
       carregarFilmes()
-    } catch (error: any) {
-      alert(error.message || "Erro ao excluir filme")
+    } catch (err: any) {
+      error("Erro ao excluir filme", err.message || "Ocorreu um erro inesperado")
     }
   }
 
@@ -155,13 +161,14 @@ export default function FilmesPage() {
       ano_lancamento: "",
       genero: "",
       sinopse: "",
+      capa_url: "",
     })
     setModoEdicao(false)
     setDialogAberto(true)
   }
 
   const abrirDialogEdicao = (filme: Filme) => {
-    setFilmeEditando(filme)
+    setFilmeEditando({ ...filme, capa_url: filme.capa_url || "" })
     setModoEdicao(true)
     setDialogAberto(true)
   }
@@ -189,7 +196,7 @@ export default function FilmesPage() {
                 Novo Filme
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{modoEdicao ? "Editar Filme" : "Adicionar Filme"}</DialogTitle>
                 <DialogDescription>
@@ -199,71 +206,88 @@ export default function FilmesPage() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="titulo">Título</Label>
-                  <Input
-                    id="titulo"
-                    value={modoEdicao ? filmeEditando?.titulo || "" : novoFilme.titulo}
-                    onChange={(e) => {
-                      if (modoEdicao && filmeEditando) {
-                        setFilmeEditando({ ...filmeEditando, titulo: e.target.value })
-                      } else {
-                        setNovoFilme({ ...novoFilme, titulo: e.target.value })
-                      }
-                    }}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="titulo">Título</Label>
+                    <Input
+                      id="titulo"
+                      value={modoEdicao ? filmeEditando?.titulo || "" : novoFilme.titulo}
+                      onChange={(e) => {
+                        if (modoEdicao && filmeEditando) {
+                          setFilmeEditando({ ...filmeEditando, titulo: e.target.value })
+                        } else {
+                          setNovoFilme({ ...novoFilme, titulo: e.target.value })
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="diretor">Diretor</Label>
+                    <Input
+                      id="diretor"
+                      value={modoEdicao ? filmeEditando?.diretor || "" : novoFilme.diretor}
+                      onChange={(e) => {
+                        if (modoEdicao && filmeEditando) {
+                          setFilmeEditando({ ...filmeEditando, diretor: e.target.value })
+                        } else {
+                          setNovoFilme({ ...novoFilme, diretor: e.target.value })
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="anoLancamento">Ano de Lançamento</Label>
+                    <Input
+                      id="anoLancamento"
+                      value={modoEdicao ? filmeEditando?.ano_lancamento || "" : novoFilme.ano_lancamento}
+                      onChange={(e) => {
+                        if (modoEdicao && filmeEditando) {
+                          setFilmeEditando({ ...filmeEditando, ano_lancamento: e.target.value })
+                        } else {
+                          setNovoFilme({ ...novoFilme, ano_lancamento: e.target.value })
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="genero">Gênero</Label>
+                    <Select
+                      value={modoEdicao ? filmeEditando?.genero || "" : novoFilme.genero}
+                      onValueChange={(value) => {
+                        if (modoEdicao && filmeEditando) {
+                          setFilmeEditando({ ...filmeEditando, genero: value })
+                        } else {
+                          setNovoFilme({ ...novoFilme, genero: value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um gênero" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {generos.map((genero) => (
+                          <SelectItem key={genero} value={genero}>
+                            {genero}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="diretor">Diretor</Label>
-                  <Input
-                    id="diretor"
-                    value={modoEdicao ? filmeEditando?.diretor || "" : novoFilme.diretor}
-                    onChange={(e) => {
+                  <ImageUpload
+                    value={modoEdicao ? filmeEditando?.capa_url || "" : novoFilme.capa_url}
+                    onChange={(value) => {
                       if (modoEdicao && filmeEditando) {
-                        setFilmeEditando({ ...filmeEditando, diretor: e.target.value })
+                        setFilmeEditando({ ...filmeEditando, capa_url: value })
                       } else {
-                        setNovoFilme({ ...novoFilme, diretor: e.target.value })
+                        setNovoFilme({ ...novoFilme, capa_url: value })
                       }
                     }}
+                    disabled={submitting}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="anoLancamento">Ano de Lançamento</Label>
-                  <Input
-                    id="anoLancamento"
-                    value={modoEdicao ? filmeEditando?.ano_lancamento || "" : novoFilme.ano_lancamento}
-                    onChange={(e) => {
-                      if (modoEdicao && filmeEditando) {
-                        setFilmeEditando({ ...filmeEditando, ano_lancamento: e.target.value })
-                      } else {
-                        setNovoFilme({ ...novoFilme, ano_lancamento: e.target.value })
-                      }
-                    }}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="genero">Gênero</Label>
-                  <Select
-                    value={modoEdicao ? filmeEditando?.genero || "" : novoFilme.genero}
-                    onValueChange={(value) => {
-                      if (modoEdicao && filmeEditando) {
-                        setFilmeEditando({ ...filmeEditando, genero: value })
-                      } else {
-                        setNovoFilme({ ...novoFilme, genero: value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um gênero" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {generos.map((genero) => (
-                        <SelectItem key={genero} value={genero}>
-                          {genero}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sinopse">Sinopse</Label>
@@ -297,30 +321,40 @@ export default function FilmesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Capa</TableHead>
                 <TableHead>Título</TableHead>
                 <TableHead>Diretor</TableHead>
                 <TableHead>Ano</TableHead>
                 <TableHead>Gênero</TableHead>
-                <TableHead>Sinopse</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filmes.map((filme) => (
                 <TableRow key={filme.id}>
-                  <TableCell>{filme.titulo}</TableCell>
+                  <TableCell>
+                    <div className="w-12 h-16 bg-gray-100 rounded overflow-hidden flex items-center justify-center">
+                      {filme.capa_url ? (
+                        <img
+                          src={filme.capa_url || "/placeholder.svg"}
+                          alt={`Capa de ${filme.titulo}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="h-6 w-6 text-gray-400" />
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium">{filme.titulo}</TableCell>
                   <TableCell>{filme.diretor}</TableCell>
                   <TableCell>{filme.ano_lancamento}</TableCell>
                   <TableCell>{filme.genero}</TableCell>
-                  <TableCell>
-                    {filme.sinopse.length > 100 ? `${filme.sinopse.substring(0, 100)}...` : filme.sinopse}
-                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="icon" onClick={() => abrirDialogEdicao(filme)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="icon" onClick={() => excluirFilme(filme.id)}>
+                      <Button variant="outline" size="icon" onClick={() => excluirFilme(filme.id, filme.titulo)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

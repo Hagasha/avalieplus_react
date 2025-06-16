@@ -20,6 +20,7 @@ export interface Filme {
   ano_lancamento: string
   genero: string
   sinopse: string
+  capa_url?: string
   created_at: string
 }
 

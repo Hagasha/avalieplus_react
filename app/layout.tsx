@@ -2,6 +2,7 @@ import type React from "react"
 import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Navbar } from "@/components/navbar"
+import { NotificationContainer } from "@/components/notification"
 
 export const metadata = {
   title: "Avalieplus - Sistema de Avaliação de Filmes",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <Navbar />
           <main>{children}</main>
+          <NotificationContainer />
         </ThemeProvider>
       </body>
     </html>
